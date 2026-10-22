@@ -21,7 +21,8 @@ document.querySelector('#inquiry-form').addEventListener('submit',async e=>{
  button.disabled=true; button.textContent='Sending…'; status.textContent=''; status.dataset.state='pending';
  try {
   const response=await fetch('/api/inquiry',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(values)});
-  const result=await response.json();
+  let result;
+  try {result=await response.json();} catch {throw new Error('Our inquiry service is temporarily unavailable. Please try again or call (307) 429-2064.');}
   if(!response.ok||!result.ok) throw new Error(result.error||'Your inquiry could not be sent. Please try again or call (307) 429-2064.');
   status.textContent='Thank you. Your inquiry has been sent to our team. We look forward to learning about your district.';
   status.dataset.state='success'; form.reset();
