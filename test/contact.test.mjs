@@ -1,0 +1,13 @@
+import{test}from'node:test';import assert from'node:assert/strict';import{handleInquiry}from'../src/contact.mjs';
+const input={name:'Test User',email:'test@example.com',organization:'Example School District',state:'Wyoming',format:'in-person',message:'Deployment verification.',website:''};
+const env={CONTACT_EMAIL:{},CONTACT_TO:'team@example.com',CONTACT_FROM:'inquiries@sgolaunch.com',CONTACT_RATE_LIMIT:{limit:async()=>({success:true})}};
+const req=(data=input,headers={})=>new Request('https://sgolaunch.com/api/inquiry',{method:'POST',headers:{origin:'https://sgolaunch.com','content-type':'application/json',...headers},body:JSON.stringify(data)});
+test('success is returned only after delivery accepts the inquiry',async()=>{let sent;const r=await handleInquiry(req(),env,async m=>{sent=m});assert.equal(r.status,200);assert.equal((await r.json()).ok,true);assert.equal(sent.replyTo,input.email);assert.match(sent.text,/Example School District/);});
+test('failed email delivery returns an error, not success',async()=>{const r=await handleInquiry(req(),env,async()=>{throw Error('provider failure')});assert.equal(r.status,502);assert.equal((await r.json()).ok,false);});
+test('missing configuration fails clearly',async()=>{assert.equal((await handleInquiry(req(),{},async()=>{})).status,503);});
+test('rejects invalid or injected email headers',async()=>{for(const email of['bad','a@example.com\r\nBcc: b@example.com'])assert.equal((await handleInquiry(req({...input,email}),env,async()=>assert.fail('must not send'))).status,400);});
+test('rejects cross-origin requests',async()=>{assert.equal((await handleInquiry(req(input,{origin:'https://other.example'}),env,async()=>assert.fail())).status,403);});
+test('rejects missing required fields',async()=>{assert.equal((await handleInquiry(req({...input,organization:''}),env,async()=>assert.fail())).status,400);});
+test('honeypot drops spam without emailing',async()=>{assert.equal((await handleInquiry(req({...input,website:'bot'}),env,async()=>assert.fail())).status,200);});
+test('rate limit prevents delivery',async()=>{assert.equal((await handleInquiry(req(),{...env,CONTACT_RATE_LIMIT:{limit:async()=>({success:false})}},async()=>assert.fail())).status,429);});
+test('oversized request is rejected',async()=>{assert.equal((await handleInquiry(req({...input,message:'x'.repeat(15000)}),env,async()=>assert.fail())).status,413);});
